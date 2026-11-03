@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body { height: 100%; background: #141019; color: #f7ecd5; }
+body { font-family: "VT323", ui-monospace, monospace; font-size: 20px; -webkit-font-smoothing: none; }
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* Pixel-art panel: chunky double border with inner highlight */
+.px-panel { background: #262035; border: 3px solid #120e18; box-shadow: inset 0 0 0 3px #4a3f63, 0 6px 0 0 rgba(0,0,0,.35); border-radius: 6px; }
+.px-panel-light { background: #f7ecd5; color: #1b1726; border: 3px solid #120e18; box-shadow: inset 0 0 0 3px #c9b796, 0 6px 0 0 rgba(0,0,0,.35); border-radius: 6px; }
+.px-btn { font-family: "Press Start 2P", monospace; font-size: 10px; line-height: 1.4; padding: 8px 12px; background: #4a3f63; color: #f7ecd5; border: 3px solid #120e18; box-shadow: inset -3px -3px 0 0 rgba(0,0,0,.3), inset 3px 3px 0 0 rgba(255,255,255,.12); border-radius: 4px; cursor: pointer; transition: transform .05s; }
+.px-btn:hover { background: #5b4e78; }
+.px-btn:active { transform: translateY(2px); }
+.px-btn:disabled { opacity: .5; cursor: not-allowed; }
+.px-btn-gold { background: #f2c14e; color: #1b1726; }
+.px-btn-gold:hover { background: #ffd36b; }
+.px-btn-teal { background: #2f8f80; }
+.px-btn-teal:hover { background: #3aa898; }
+.px-btn-rose { background: #b84a5c; }
+.px-btn-rose:hover { background: #cf5a6d; }
+.px-input { font-family: "VT323", monospace; font-size: 20px; background: #1b1726; color: #f7ecd5; border: 3px solid #120e18; box-shadow: inset 0 0 0 2px #4a3f63; padding: 6px 10px; border-radius: 4px; outline: none; width: 100%; }
+.px-input:focus { box-shadow: inset 0 0 0 2px #f2c14e; }
+.pixel-title { font-family: "Press Start 2P", monospace; }
+.ui-font { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+/* Business OS (desk computer) — modern readable UI inside a pixel bezel */
+.os table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.os th { text-align: left; color: #a89cc0; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid #3a3150; }
+.os td { padding: 6px 8px; border-bottom: 1px solid #2b2438; }
+.md h2 { font-size: 15px; font-weight: 700; margin: 16px 0 6px; color: #f2c14e; }
+.md h3 { font-size: 14px; font-weight: 700; margin: 12px 0 4px; }
+.md p { margin: 6px 0; line-height: 1.55; }
+.md ul { list-style: disc; padding-left: 20px; margin: 6px 0; }
+.md li { margin: 3px 0; line-height: 1.5; }
+.md blockquote { border-left: 3px solid #4a3f63; padding-left: 10px; color: #c9bfdc; margin: 8px 0; }
+.md table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+.md th, .md td { border: 1px solid #3a3150; padding: 4px 8px; text-align: left; }
+.md th { background: #30283f; }
+.md code { background: #1b1726; padding: 1px 4px; border-radius: 3px; }
+.md hr { border-color: #3a3150; margin: 12px 0; }
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: #4a3f63; border-radius: 4px; }
+@keyframes blink { 50% { opacity: 0; } }
+.blink { animation: blink 1s steps(1) infinite; }
+@keyframes pop { from { transform: scale(.92); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+.pop { animation: pop .14s ease-out; }

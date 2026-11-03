@@ -1,0 +1,404 @@
+// Executive HQ — multi-tenant schema. Every business row carries companyId (tenant key).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id         String   @id @default(cuid())
+  name       String
+  logo       Json     // { symbol, color, bg }
+  settings   Json     // { autoBriefing, endOfDayRecap, interruptionLevel, timezone }
+  createdAt  DateTime @default(now())
+  users      User[]
+  agents     Agent[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  avatar       Json
+  role         String   @default("ceo")
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lastSeenAt   DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model Agent {
+  id               String   @id @default(cuid())
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key              String   // cfo, coo, ea, custom-xyz
+  name             String
+  title            String
+  department       String
+  roleDescription  String
+  responsibilities Json     // string[]
+  objectives       Json     // string[]
+  personality      String   @default("")
+  avatar           Json
+  office           String   // room key in the game map
+  permissions      Json     // string[] of tool names
+  status           String   @default("idle") // idle | working | waiting | finished
+  statusNote       String   @default("")
+  isActive         Boolean  @default(true)
+  isCore           Boolean  @default(false)
+  tokensUsed       Int      @default(0)
+  costMicros       Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@unique([companyId, key])
+  @@index([companyId])
+}
+
+model AgentMemory {
+  id         String   @id @default(cuid())
+  companyId  String
+  agentId    String
+  kind       String   @default("fact") // fact | preference | summary | instruction
+  content    String
+  importance Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, agentId])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  companyId String
+  agentId   String?
+  kind      String   @default("direct") // direct | meeting | briefing | walk
+  title     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages  Message[]
+
+  @@index([companyId, agentId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  companyId      String
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // ceo | agent | system
+  agentId        String?
+  content        String
+  meta           Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  companyId   String
+  agentId     String
+  title       String
+  description String
+  priority    String    @default("normal") // low | normal | high | urgent
+  deadline    DateTime?
+  status      String    @default("queued") // queued | working | awaiting_approval | complete | failed | cancelled
+  source      String    @default("ceo")    // ceo | autonomous | meeting | briefing | scheduled | agent
+  requestedBy String?   // agentId if delegated by another agent
+  output      String?
+  reportId    String?
+  error       String?
+  progress    Int       @default(0)
+  runAfter    DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([companyId, status])
+  @@index([companyId, agentId])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  companyId  String
+  agentId    String?
+  taskId     String?
+  title      String
+  type       String   // financial | operations | sales | marketing | technical | hr | briefing | meeting_notes | general
+  content    String   // markdown
+  dataSource String   // e.g. "demo" or "stripe" or "demo+stripe"
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, createdAt])
+}
+
+model Approval {
+  id           String    @id @default(cuid())
+  companyId    String
+  agentId      String
+  taskId       String?
+  action       String    // send_external_message | spend_money | delete_data | modify_system | launch_campaign | irreversible_change
+  summary      String
+  details      String
+  payload      Json
+  risk         String    @default("high")
+  status       String    @default("pending") // pending | approved | rejected | postponed | delegated
+  decisionNote String?
+  executionLog String?
+  createdAt    DateTime  @default(now())
+  decidedAt    DateTime?
+
+  @@index([companyId, status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  companyId String
+  agentId   String?
+  kind      String   // task_complete | approval | alert | briefing | info | idea
+  priority  String   @default("normal") // low | normal | high | critical
+  title     String
+  body      String
+  link      Json?    // { type: 'report'|'task'|'approval'|'briefing', id }
+  read      Boolean  @default(false)
+  approached Boolean @default(false) // agent has physically approached the CEO about it
+  createdAt DateTime @default(now())
+
+  @@index([companyId, read, createdAt])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  companyId String
+  agentId   String?
+  action    String
+  detail    String
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  companyId String
+  actor     String   // user:<id> | agent:<id> | system
+  action    String
+  target    String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+}
+
+// Durable job queue (Postgres, FOR UPDATE SKIP LOCKED). Survives restarts; independent of browser sessions.
+model Job {
+  id          String    @id @default(cuid())
+  companyId   String
+  type        String
+  payload     Json
+  status      String    @default("queued") // queued | running | done | failed
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?
+  dedupeKey   String?   @unique
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([status, runAt])
+}
+
+model Schedule {
+  id              String   @id @default(cuid())
+  companyId       String
+  agentId         String?
+  name            String
+  jobType         String
+  payload         Json
+  intervalMinutes Int?
+  dailyHour       Int?
+  nextRunAt       DateTime
+  enabled         Boolean  @default(true)
+  lastRunAt       DateTime?
+
+  @@index([enabled, nextRunAt])
+}
+
+model Briefing {
+  id          String    @id @default(cuid())
+  companyId   String
+  kind        String    // morning | eod
+  date        String    // YYYY-MM-DD
+  greeting    String
+  content     Json      // structured sections
+  status      String    @default("prepared") // prepared | delivered | later | dismissed
+  generatedBy String    @default("offline")  // claude | offline
+  ceoNotes    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  deliveredAt DateTime?
+
+  @@unique([companyId, kind, date])
+}
+
+model Meeting {
+  id             String   @id @default(cuid())
+  companyId      String
+  topic          String
+  agentIds       Json
+  conversationId String
+  status         String   @default("active") // active | ended
+  notesReportId  String?
+  createdAt      DateTime @default(now())
+}
+
+model Idea {
+  id        String   @id @default(cuid())
+  companyId String
+  agentId   String
+  title     String
+  body      String
+  status    String   @default("new") // new | accepted | declined
+  createdAt DateTime @default(now())
+}
+
+model FurnitureItem {
+  id        String @id @default(cuid())
+  companyId String
+  room      String
+  itemType  String
+  x         Int
+  y         Int
+  variant   Int    @default(0)
+
+  @@index([companyId, room])
+}
+
+model Integration {
+  id             String    @id @default(cuid())
+  companyId      String
+  provider       String
+  status         String    @default("disconnected") // connected | error | disconnected
+  encryptedCreds String?
+  scopes         Json?
+  meta           Json?
+  connectedAt    DateTime?
+  lastSyncAt     DateTime?
+  lastError      String?
+
+  @@unique([companyId, provider])
+}
+
+// ---------------- Business data (each row labelled with its source) ----------------
+model FinancialPeriod {
+  id         String @id @default(cuid())
+  companyId  String
+  month      String // YYYY-MM
+  revenue    Float
+  expenses   Float
+  breakdown  Json   // { payroll, software, marketing, rent, other }
+  cash       Float
+  arr        Float  @default(0)
+  customers  Int    @default(0)
+  source     String // demo | stripe | quickbooks
+
+  @@unique([companyId, month, source])
+}
+
+model Budget {
+  id        String @id @default(cuid())
+  companyId String
+  category  String
+  monthly   Float
+  source    String
+}
+
+model Goal {
+  id        String   @id @default(cuid())
+  companyId String
+  title     String
+  target    Float
+  current   Float
+  unit      String
+  dueDate   DateTime
+  source    String
+}
+
+model Project {
+  id         String   @id @default(cuid())
+  companyId  String
+  name       String
+  ownerKey   String
+  status     String   // on_track | at_risk | delayed | complete
+  progress   Int
+  dueDate    DateTime
+  blockers   String   @default("")
+  source     String
+  updatedAt  DateTime @updatedAt
+}
+
+model Deal {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  account     String
+  stage       String   // conversation | meeting | proposal | negotiation | won | lost
+  value       Float
+  probability Int
+  closeDate   DateTime
+  leadSource  String
+  source      String
+  createdAt   DateTime @default(now())
+}
+
+model Campaign {
+  id            String @id @default(cuid())
+  companyId     String
+  name          String
+  channel       String
+  status        String // draft | active | paused | complete
+  spend         Float
+  sent          Int
+  accepted      Int
+  replies       Int
+  meetings      Int
+  source        String
+}
+
+model CalendarEvent {
+  id        String   @id @default(cuid())
+  companyId String
+  title     String
+  start     DateTime
+  end       DateTime
+  attendees String
+  source    String
+}
+
+model InboxMessage {
+  id            String   @id @default(cuid())
+  companyId     String
+  sender        String
+  subject       String
+  snippet       String
+  receivedAt    DateTime
+  needsResponse Boolean  @default(false)
+  important     Boolean  @default(false)
+  source        String
+}
+
+model SystemCheck {
+  id        String   @id @default(cuid())
+  companyId String
+  service   String
+  status    String   // healthy | degraded | down
+  latencyMs Int
+  note      String   @default("")
+  checkedAt DateTime @default(now())
+  source    String
+}
